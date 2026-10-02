@@ -1,0 +1,4 @@
+# Built output — people build their own copy with ./install.sh
+.build/
+Claude Meter.app/
+.DS_Store

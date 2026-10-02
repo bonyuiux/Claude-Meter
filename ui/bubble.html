@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<title>Claude Meter bubble</title>
+<!-- The pop-out status bubble. It lives in its own little window above (or below) the meter,
+     so the meter itself stays exactly as it is. Meter.swift calls bubble.show(state, theme, side). -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist+Mono:wght@600&display=swap">
+<link rel="stylesheet" href="meter.css">
+<style>
+  html, body { margin:0; background:transparent; overflow:hidden; }
+  .bubble {
+    position:absolute; left:2px;
+    display:none; align-items:center; gap:8px;
+    padding:5px 12px 5px 6px;
+    background:var(--bg); color:var(--fg);
+    border:2px solid var(--line);
+    box-shadow:4px 4px 0 var(--hard-shadow);
+    font-family:"Geist Mono", ui-monospace, Menlo, monospace; font-weight:600;
+    font-size:12px; letter-spacing:.14em; text-transform:uppercase; white-space:nowrap;
+    transform-origin:20px 100%;
+  }
+  .bubble.on { display:flex; animation:pop 240ms steps(3) both; }
+  /* Above the meter the tail points down; below it, the tail points up. */
+  .bubble[data-side="above"] { bottom:12px; }
+  .bubble[data-side="below"] { top:12px; transform-origin:20px 0; }
+  .tail { position:absolute; left:14px; width:14px; height:8px; }
+  .bubble[data-side="above"] .tail { top:100%; margin-top:2px; }
+  .bubble[data-side="below"] .tail { bottom:100%; margin-bottom:2px; transform:scaleY(-1); }
+  .tail rect { fill:var(--line); }
+  .tail .fill { fill:var(--bg); }
+  canvas { width:45px; height:33px; image-rendering:pixelated; display:block; }
+
+  .bubble[data-state="done"] { background:#E8FF00; color:#0E0E0B; border-color:#0E0E0B; }
+  .bubble[data-state="done"] .tail .fill { fill:#E8FF00; }
+  .bubble[data-state="done"] .tail rect:not(.fill) { fill:#0E0E0B; }
+  .bubble[data-state="waiting"] { color:var(--warn); }
+  .dots { display:inline-block; width:2.2ch; text-align:left; }
+
+  @keyframes pop { 0% { transform:scale(.4); } 66% { transform:scale(1.08); } 100% { transform:scale(1); } }
+  @media (prefers-reduced-motion: reduce) { .bubble.on { animation:none; } }
+</style>
+</head>
+<body>
+  <div class="bubble" id="bubble" data-state="working" data-side="above" role="status">
+    <canvas id="sprite" aria-hidden="true"></canvas>
+    <span><span id="text">Thinking</span><span class="dots" id="dots"></span></span>
+    <!-- A stepped pixel tail pointing at the meter -->
+    <svg class="tail" viewBox="0 0 7 4" shape-rendering="crispEdges" aria-hidden="true">
+      <rect x="0" y="0" width="7" height="1"/><rect x="1" y="1" width="5" height="1"/>
+      <rect x="2" y="2" width="3" height="1"/><rect x="3" y="3" width="1" height="1"/>
+      <rect class="fill" x="1" y="0" width="5" height="1"/><rect class="fill" x="2" y="1" width="3" height="1"/>
+      <rect class="fill" x="3" y="2" width="1" height="1"/>
+    </svg>
+  </div>
+<script src="bubble.js"></script>
+</body>
+</html>

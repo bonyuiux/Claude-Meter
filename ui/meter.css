@@ -1,0 +1,146 @@
+/* Claude Meter — "Loud Retro" design tokens (dark + light).
+   Square corners, 2px borders, hard offset shadows, stepped motion. */
+
+:root, :root[data-theme="dark"] {
+  --bg:#0B0A12; --bg-2:#141122; --surface:#1D1A2D; --surface-2:#2A2640;
+  --fg:#F2F0FF; --text-2:#C9C6DA; --muted:#9A96B0;
+  --line:#F2F0FF; --line-soft:#2A2640;
+  --accent-text:#E8FF00; --bar:#E8FF00; --hard-shadow:#7C5CFF;
+  --warn:#FF5CAD;       /* lighter than brand pink so small text passes 4.5:1 on --bg */
+  --focus:#A48CFF;
+}
+:root[data-theme="light"] {
+  --bg:#E6E4EC; --bg-2:#D9D6E2; --surface:#F4F3F8; --surface-2:#C9C5D6;
+  --fg:#0B0A12; --text-2:#3E3A52; --muted:#5A5672;
+  --line:#0B0A12; --line-soft:#C4C0D2;
+  --accent-text:#5B3FE0; --bar:#7C5CFF; --hard-shadow:#0B0A12;
+  --warn:#B0156A;
+  --focus:#5B3FE0;
+}
+
+/* The window itself is transparent; only the card is painted. */
+html, body { margin:0; background:transparent; overflow:hidden; }
+body { -webkit-user-select:none; user-select:none; cursor:default; }
+
+.card {
+  position:absolute; top:0; left:0;
+  width:352px; box-sizing:border-box;
+  padding:12px 14px 9px;
+  background:var(--bg); color:var(--fg);
+  border:2px solid var(--line);
+  box-shadow:6px 6px 0 var(--hard-shadow);
+  font-family:Geist, -apple-system, system-ui, sans-serif;
+  display:grid;
+  grid-template-columns:1fr auto;
+  column-gap:12px;
+  grid-template-areas:
+    "head   head"
+    "left   reset"
+    "lane   lane"
+    "tags   tags"
+    "week   week"
+    "foot   foot";
+}
+
+.label, .tag, .foot, .sticker, .big-unit {
+  font-family:"Geist Mono", ui-monospace, Menlo, monospace;
+  font-weight:600; text-transform:uppercase; letter-spacing:.14em;
+}
+.label { font-size:10px; color:var(--muted); }
+
+.head { grid-area:head; display:flex; align-items:center; gap:8px; min-width:0; padding-right:34px; }
+.sticker { font-size:9.5px; background:#E8FF00; color:#0E0E0B; padding:3px 6px 2px; letter-spacing:.12em; }
+.head .label { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+
+.icon-btn {
+  position:absolute; top:10px; right:12px;
+  width:26px; height:26px; padding:0;
+  display:grid; place-items:center;
+  background:var(--surface); color:var(--fg);
+  border:2px solid var(--line); border-radius:0;
+  box-shadow:2px 2px 0 var(--hard-shadow);
+  cursor:pointer;
+  transition:transform 120ms steps(2), box-shadow 120ms steps(2);
+}
+.icon-btn svg { width:12px; height:12px; fill:currentColor; shape-rendering:crispEdges; }
+.icon-btn:hover { transform:translate(-1px,-1px); box-shadow:3px 3px 0 var(--hard-shadow); }
+.icon-btn:active { transform:translate(1px,1px); box-shadow:1px 1px 0 var(--hard-shadow); }
+.icon-btn:focus-visible { outline:2px solid var(--focus); outline-offset:2px; }
+
+/* Big readout: what's left, and when it refills */
+.left { grid-area:left; display:flex; align-items:flex-end; gap:6px; margin-top:8px; }
+.big {
+  font-family:"Geist Pixel", ui-monospace, monospace; font-weight:400;
+  font-size:52px; line-height:.86; letter-spacing:-.02em; color:var(--accent-text);
+  font-variant-numeric:tabular-nums;
+}
+.big-unit { font-size:10px; line-height:1.25; color:var(--fg); padding-bottom:2px; }
+
+.reset { grid-area:reset; display:flex; flex-direction:column; align-items:flex-end; justify-content:flex-end; gap:3px; margin-top:8px; }
+.count {
+  font-family:"Geist Pixel", ui-monospace, monospace; font-weight:400;
+  font-size:26px; line-height:.9; color:var(--fg);
+  font-variant-numeric:tabular-nums;
+}
+.at { font-size:9.5px; }
+
+.lane {
+  grid-area:lane; position:relative; height:52px; margin-top:12px;
+  background:var(--bg-2); border:2px solid var(--line-soft);
+  cursor:pointer;
+}
+.lane canvas { display:block; width:100%; height:100%; image-rendering:pixelated; }
+
+.tags { grid-area:tags; position:relative; height:15px; margin:0 2px; }
+.tag { position:absolute; top:4px; font-size:8.5px; color:var(--muted); white-space:nowrap; letter-spacing:.1em; }
+.tag.now { color:var(--fg); }
+.tag.fire { color:var(--warn); }
+.tag.end { right:0; }
+
+/* Weekly: a plain bar. The fill is what you've used; the right end is the limit and the reset. */
+.week { grid-area:week; margin-top:12px; display:grid; gap:5px; }
+.wrow { display:flex; justify-content:space-between; align-items:baseline; gap:8px; }
+.wleft { font-family:"Geist Pixel", ui-monospace, monospace; font-size:16px; line-height:1; color:var(--fg); }
+.wbar { height:12px; border:2px solid var(--line); background:var(--bg-2); }
+.wbar i { display:block; height:100%; background:var(--bar); }
+.week .wrow .label.strong { color:var(--fg); }
+
+.foot {
+  grid-area:foot; display:flex; justify-content:space-between; gap:8px;
+  margin-top:10px; padding-top:7px; border-top:2px solid var(--line-soft);
+  font-size:8.5px; color:var(--muted); letter-spacing:.1em;
+}
+/* Credit sits bottom-right; on hover it swaps for the right-click hint in the same spot. */
+.foot .credit { display:grid; justify-items:end; }
+.foot .by, .foot .hint { grid-area:1 / 1; white-space:nowrap; }
+.foot .hint { visibility:hidden; }
+.card:hover .foot .hint { visibility:visible; }
+.card:hover .foot .by { visibility:hidden; }
+
+/* Moods change the colour of the big number */
+.card[data-mood="warn"] .big { color:var(--warn); }
+.card[data-mood="out"] .big { color:var(--muted); }
+
+/* Mini size: one row with the number, the lane and the countdown */
+html.mini .card {
+  width:auto;
+  padding:8px 10px 8px 12px;
+  grid-template-columns:auto 190px auto auto;
+  grid-template-areas:"left lane reset btn";
+  align-items:center;
+}
+html.mini .head, html.mini .tags,
+html.mini .week, html.mini .foot, html.mini .reset .at { display:none; }
+/* Keep a small "Resets in" over the countdown so the time isn't ambiguous */
+html.mini .reset .label { font-size:8px; letter-spacing:.12em; }
+html.mini .reset { gap:2px; }
+html.mini .left, html.mini .reset { margin:0; }
+html.mini .big { font-size:30px; }
+html.mini .big-unit { font-size:8.5px; }
+html.mini .count { font-size:18px; }
+html.mini .lane { margin:0; height:44px; }
+html.mini .icon-btn { position:static; grid-area:btn; align-self:center; }
+
+@media (prefers-reduced-motion: reduce) {
+  .icon-btn, .foot .hint { transition:none; }
+}

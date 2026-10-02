@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Claude Meter</title>
+<!-- Geist family from Google Fonts. If offline, the system fallbacks still read fine. -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500&family=Geist+Mono:wght@500;600&family=Geist+Pixel&display=swap">
+<link rel="stylesheet" href="meter.css">
+</head>
+<body>
+  <main class="card" id="card" data-mood="ok">
+    <header class="head">
+      <span class="sticker">CLAUDE</span>
+      <span class="label" id="plan">5-hour limit</span>
+    </header>
+
+    <button class="icon-btn" id="sizeBtn" type="button" aria-label="Switch to mini size" title="Mini size">
+      <svg viewBox="0 0 8 8" aria-hidden="true"><rect x="1" y="5" width="6" height="2"/></svg>
+    </button>
+
+    <div class="left">
+      <span class="big" id="left">--</span><span class="big-unit">%<br>left</span>
+    </div>
+
+    <div class="reset">
+      <span class="label">Resets in</span>
+      <span class="count" id="count">--</span>
+      <span class="label at" id="resetAt"></span>
+    </div>
+
+    <!-- The lane: Clawd runs to the reset flag as time passes; a fire of burned tokens chases him. -->
+    <div class="lane" id="laneBox" title="Clawd runs to the reset. Don't let the fire catch him.">
+      <canvas id="lane" aria-hidden="true"></canvas>
+    </div>
+    <div class="tags" aria-hidden="true">
+      <span class="tag fire" id="tagFire">Burned 0%</span>
+      <span class="tag now" id="tagNow">Now</span>
+      <span class="tag end">RESET</span>
+    </div>
+
+    <section class="week" aria-label="Weekly limit">
+      <div class="wrow">
+        <span class="label strong">Weekly limit</span>
+        <span class="wleft" id="wLeft">--</span>
+      </div>
+      <div class="wbar"><i id="wFill"></i></div>
+      <div class="wrow">
+        <span class="label" id="wUsed">Used --</span>
+        <span class="label" id="wReset">Resets --</span>
+      </div>
+    </section>
+
+    <footer class="foot">
+      <span id="foot"></span>
+      <span class="credit"><span class="by">© 2026 Bon Yeung</span><span class="hint">Right-click for options</span></span>
+    </footer>
+  </main>
+<script src="meter.js"></script>
+</body>
+</html>
