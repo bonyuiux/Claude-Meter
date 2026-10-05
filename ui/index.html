@@ -15,6 +15,9 @@
       <span class="label" id="plan">5-hour limit</span>
     </header>
 
+    <button class="icon-btn sync-btn" id="syncBtn" type="button" aria-label="Sync now" title="Sync now">
+      <svg viewBox="0 0 8 8" aria-hidden="true"><path d="M2 1h4v1h1v2H6V2H2v1H1V2h1zM1 4h1v2h4V5h1v1H6v1H2V6H1z"/><path d="M5 0h1v3H5zM2 5h1v3H2z"/></svg>
+    </button>
     <button class="icon-btn" id="sizeBtn" type="button" aria-label="Switch to mini size" title="Mini size">
       <svg viewBox="0 0 8 8" aria-hidden="true"><rect x="1" y="5" width="6" height="2"/></svg>
     </button>
@@ -27,6 +30,7 @@
       <span class="label">Resets in</span>
       <span class="count" id="count">--</span>
       <span class="label at" id="resetAt"></span>
+      <span class="mini-live" id="miniLive"></span>
     </div>
 
     <!-- The lane: Clawd runs to the reset flag as time passes; a fire of burned tokens chases him. -->

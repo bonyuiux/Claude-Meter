@@ -150,6 +150,159 @@ func saveSync(_ s: SyncData, source: String) {
     }
 }
 
+// MARK: - Live usage (exact numbers for all of Claude)
+//
+// Claude's own Usage page reads your account's usage from Anthropic. With a Claude Code sign-in on
+// this Mac, the meter can ask the same place once a minute, so the numbers include chat, Claude Code
+// and everything else, not just what's in the local logs.
+// The sign-in lives in the macOS Keychain item "Claude Code-credentials" (written by `claude auth login`).
+// When its key is about to expire, the meter renews it exactly the way Claude Code does and saves the
+// new key back to the same Keychain item, so Claude Code stays signed in too.
+// The key never leaves this Mac except to Anthropic, and the meter never shows or logs it.
+
+let keychainService = "Claude Code-credentials"
+let usageURL = URL(string: "https://api.anthropic.com/api/oauth/usage")!
+let tokenURL = URL(string: "https://platform.claude.com/v1/oauth/token")!
+let oauthClientID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"   // Claude Code's public client id
+let oauthBeta = "oauth-2025-04-20"
+
+final class LiveUsage {
+    var lastSuccess: Date?
+    var lastAttempt = Date.distantPast
+    var problem = ""            // "", "signed-out" or "offline"
+    var forceNext = false
+
+    var isLive: Bool { lastSuccess.map { Date().timeIntervalSince($0) < 180 } ?? false }
+
+    /// Runs /usr/bin/security, the same tool Claude Code uses, so macOS doesn't ask for extra Keychain access.
+    private func security(_ args: [String], input: String? = nil) -> (ok: Bool, out: String) {
+        let p = Process()
+        p.executableURL = URL(fileURLWithPath: "/usr/bin/security")
+        p.arguments = args
+        let out = Pipe(), inp = Pipe()
+        p.standardOutput = out
+        p.standardError = Pipe()
+        if input != nil { p.standardInput = inp }
+        do { try p.run() } catch { return (false, "") }
+        if let input { inp.fileHandleForWriting.write(input.data(using: .utf8)!); try? inp.fileHandleForWriting.close() }
+        let data = out.fileHandleForReading.readDataToEndOfFile()
+        p.waitUntilExit()
+        return (p.terminationStatus == 0, String(data: data, encoding: .utf8) ?? "")
+    }
+
+    private func readCredentials() -> (account: String, blob: [String: Any])? {
+        let attrs = security(["find-generic-password", "-s", keychainService])
+        guard attrs.ok,
+              let r = attrs.out.range(of: #""acct"<blob>="([^"]*)""#, options: .regularExpression) else { return nil }
+        let account = String(attrs.out[r]).replacingOccurrences(of: #""acct"<blob>=""#, with: "", options: .regularExpression).dropLast()
+        let secret = security(["find-generic-password", "-s", keychainService, "-w"])
+        guard secret.ok, let data = secret.out.trimmingCharacters(in: .whitespacesAndNewlines).data(using: .utf8),
+              let blob = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return nil }
+        return (String(account), blob)
+    }
+
+    private func writeCredentials(account: String, blob: [String: Any]) {
+        guard let data = try? JSONSerialization.data(withJSONObject: blob) else { return }
+        let hex = data.map { String(format: "%02x", $0) }.joined()
+        // Same approach as Claude Code: `security -i` reads the command from stdin (so the key stays out of the
+        // process list) but only accepts lines up to ~4 KB. Longer entries must go as arguments instead,
+        // otherwise the saved value is silently cut off.
+        let line = "add-generic-password -U -a \"\(account)\" -s \"\(keychainService)\" -X \(hex)\n"
+        if line.utf8.count <= 4000 {
+            _ = security(["-i"], input: line)
+        } else {
+            _ = security(["add-generic-password", "-U", "-a", account, "-s", keychainService, "-X", hex])
+        }
+        // Never leave a broken entry behind: read it back, and if it doesn't parse, write it again as arguments.
+        if readCredentials()?.blob["claudeAiOauth"] == nil {
+            _ = security(["add-generic-password", "-U", "-a", account, "-s", keychainService, "-X", hex])
+        }
+    }
+
+    private func request(_ req: URLRequest) -> (status: Int, json: [String: Any]?) {
+        var result: (Int, [String: Any]?) = (0, nil)
+        let done = DispatchSemaphore(value: 0)
+        URLSession.shared.dataTask(with: req) { data, resp, _ in
+            let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
+            result = (code, data.flatMap { try? JSONSerialization.jsonObject(with: $0) as? [String: Any] })
+            done.signal()
+        }.resume()
+        _ = done.wait(timeout: .now() + 15)
+        return result
+    }
+
+    /// A valid access key, renewing it first if it expires within 5 minutes (or if `force`).
+    private func accessToken(force: Bool) -> String? {
+        guard let (account, blob) = readCredentials(), var oauth = blob["claudeAiOauth"] as? [String: Any],
+              let token = oauth["accessToken"] as? String else { problem = "signed-out"; return nil }
+        let expiresAt = ((oauth["expiresAt"] as? NSNumber)?.doubleValue ?? 0) / 1000
+        if !force && expiresAt - Date().timeIntervalSince1970 > 300 { return token }
+        guard let refresh = oauth["refreshToken"] as? String else { return token }
+        var req = URLRequest(url: tokenURL)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        let scopes = (oauth["scopes"] as? [String])?.joined(separator: " ")
+            ?? "user:profile user:inference user:sessions:claude_code user:mcp_servers user:file_upload"
+        req.httpBody = try? JSONSerialization.data(withJSONObject: [
+            "grant_type": "refresh_token", "refresh_token": refresh, "client_id": oauthClientID, "scope": scopes,
+        ])
+        let (status, json) = request(req)
+        guard status == 200, let json, let fresh = json["access_token"] as? String else {
+            if status == 400 || status == 401 { problem = "signed-out" }   // renewal refused: sign in again
+            return force ? nil : token
+        }
+        oauth["accessToken"] = fresh
+        if let r = json["refresh_token"] as? String { oauth["refreshToken"] = r }
+        if let e = (json["expires_in"] as? NSNumber)?.doubleValue { oauth["expiresAt"] = (Date().timeIntervalSince1970 + e) * 1000 }
+        var updated = blob
+        updated["claudeAiOauth"] = oauth
+        writeCredentials(account: account, blob: updated)
+        return fresh
+    }
+
+    private func getUsage(_ token: String) -> (Int, [String: Any]?) {
+        var req = URLRequest(url: usageURL)
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        req.setValue(oauthBeta, forHTTPHeaderField: "anthropic-beta")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.setValue("claude-meter", forHTTPHeaderField: "User-Agent")
+        return request(req)
+    }
+
+    /// For `ClaudeMeter --test-renew`: renews the sign-in now and reports whether a fetch still works.
+    func testRenewal() -> String {
+        guard let token = accessToken(force: true) else { return "renewal failed (\(problem.isEmpty ? "unknown" : problem))" }
+        let (status, _) = getUsage(token)
+        return status == 200 ? "renewal ok, usage fetch ok" : "renewed, but usage fetch returned \(status)"
+    }
+
+    /// Fetches once a minute (or right away after the sync button). Returns fresh exact numbers, or nil.
+    func fetchIfDue() -> SyncData? {
+        guard forceNext || Date().timeIntervalSince(lastAttempt) >= 60 else { return nil }
+        forceNext = false
+        lastAttempt = Date()
+        guard var token = accessToken(force: false) else { return nil }
+        var (status, json) = getUsage(token)
+        if status == 401, let renewed = accessToken(force: true) { token = renewed; (status, json) = getUsage(token) }
+        guard status == 200, let json else {
+            if problem != "signed-out" { problem = "offline" }
+            return nil
+        }
+        problem = ""
+        lastSuccess = Date()
+        var windows: [String: SyncWindow] = [:]
+        for (key, kind) in [("five_hour", "session"), ("seven_day", "weekly")] {
+            guard let w = json[key] as? [String: Any] else { continue }
+            let pct = (w["utilization"] as? NSNumber)?.doubleValue ?? 0
+            // No reset time means the window hasn't started; record it as already over so the meter shows "fresh".
+            let reset = (w["resets_at"] as? String).flatMap(parseISO) ?? Date().addingTimeInterval(-1)
+            windows[kind] = SyncWindow(percent: pct, resetsAt: reset)
+        }
+        let plan = (readCredentials()?.blob["claudeAiOauth"] as? [String: Any])?["subscriptionType"] as? String
+        return SyncData(syncedAt: Date(), plan: plan.map { $0.prefix(1).uppercased() + $0.dropFirst() }, windows: windows)
+    }
+}
+
 // MARK: - The meter maths
 
 final class Meter {
@@ -234,8 +387,15 @@ final class Meter {
         return out
     }
 
+    let live = LiveUsage()
+
     func snapshot() -> [String: Any] {
         log.scan()
+        if let fresh = live.fetchIfDue() {
+            var merged = fresh
+            if merged.plan == nil { merged.plan = loadSync()?.plan }
+            saveSync(merged, source: "live")
+        }
         let now = Date()
         let sync = loadSync()
         if let s = sync { calibrate(s) }
@@ -245,6 +405,9 @@ final class Meter {
             "syncedAt": sync.map { ms($0.syncedAt) } ?? NSNull(),
             "session": window("session", sync: sync, now: now),
             "weekly": window("weekly", sync: sync, now: now),
+            "live": live.isLive,
+            "liveAt": live.lastSuccess.map { ms($0) } ?? NSNull(),
+            "liveProblem": live.problem,
         ]
     }
 }
@@ -467,6 +630,18 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         guard let body = m.body as? [String: Any], let type = body["type"] as? String else { return }
         switch type {
         case "nodrag": web.dragAllowed = false
+        case "sync":
+            // The sync button: fetch live numbers right now; without a sign-in, explain how to set it up.
+            work.async { [weak self] in
+                guard let self else { return }
+                self.meter.live.forceNext = true
+                let p = self.meter.snapshot()
+                DispatchQueue.main.async {
+                    self.lastPayload = p
+                    self.push()
+                    if self.meter.live.problem == "signed-out" { self.signInHelp() }
+                }
+            }
         case "mini": mini = (body["value"] as? Bool) ?? false
         case "size":
             guard let w = body["w"] as? Double, let h = body["h"] as? Double else { return }
@@ -545,6 +720,22 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     @objc func toggleMini() { mini.toggle() }
     @objc func refreshNow() { refresh() }
     @objc func quit() { NSApp.terminate(nil) }
+
+    /// Shown when live numbers need a Claude Code sign-in on this Mac.
+    func signInHelp() {
+        let a = NSAlert()
+        a.messageText = "Sign in for live numbers"
+        a.informativeText = """
+        Live numbers come from your Claude account through a Claude Code sign-in on this Mac.
+
+        Open Terminal and run:  claude auth login
+        (or, if you installed Claude Meter's own copy:  ~/.claude-meter/cli/node_modules/.bin/claude auth login)
+
+        Then click the sync button again.
+        """
+        NSApp.activate(ignoringOtherApps: true)
+        a.runModal()
+    }
 
     /// Chat status needs Accessibility permission; explain it before sending you to System Settings.
     @objc func toggleChatStatus() {
@@ -716,6 +907,10 @@ final class ChatWatcher {
 let chatWatcher = ChatWatcher()
 
 // `ClaudeMeter --dump` prints what the widget would show, for troubleshooting.
+if CommandLine.arguments.contains("--test-renew") {
+    print(LiveUsage().testRenewal())
+    exit(0)
+}
 if CommandLine.arguments.contains("--dump") {
     let d = try! JSONSerialization.data(withJSONObject: Meter().snapshot(), options: [.prettyPrinted, .sortedKeys])
     print(String(data: d, encoding: .utf8)!)

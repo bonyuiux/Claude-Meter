@@ -8,6 +8,7 @@
   --accent-text:#E8FF00; --bar:#E8FF00; --hard-shadow:#7C5CFF;
   --warn:#FF5CAD;       /* lighter than brand pink so small text passes 4.5:1 on --bg */
   --focus:#A48CFF;
+  --live:#E8FF00;
 }
 :root[data-theme="light"] {
   --bg:#E6E4EC; --bg-2:#D9D6E2; --surface:#F4F3F8; --surface-2:#C9C5D6;
@@ -16,6 +17,7 @@
   --accent-text:#5B3FE0; --bar:#7C5CFF; --hard-shadow:#0B0A12;
   --warn:#B0156A;
   --focus:#5B3FE0;
+  --live:#5B3FE0;   /* no lime text on light backgrounds */
 }
 
 /* The window itself is transparent; only the card is painted. */
@@ -48,7 +50,7 @@ body { -webkit-user-select:none; user-select:none; cursor:default; }
 }
 .label { font-size:10px; color:var(--muted); }
 
-.head { grid-area:head; display:flex; align-items:center; gap:8px; min-width:0; padding-right:34px; }
+.head { grid-area:head; display:flex; align-items:center; gap:8px; min-width:0; padding-right:70px; }
 .sticker { font-size:9.5px; background:#E8FF00; color:#0E0E0B; padding:3px 6px 2px; letter-spacing:.12em; }
 .head .label { white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 
@@ -66,6 +68,17 @@ body { -webkit-user-select:none; user-select:none; cursor:default; }
 .icon-btn:hover { transform:translate(-1px,-1px); box-shadow:3px 3px 0 var(--hard-shadow); }
 .icon-btn:active { transform:translate(1px,1px); box-shadow:1px 1px 0 var(--hard-shadow); }
 .icon-btn:focus-visible { outline:2px solid var(--focus); outline-offset:2px; }
+/* Sync sits just left of the size button; it spins in steps while fetching */
+.sync-btn { right:46px; }
+.sync-btn.spinning svg { animation:spin 600ms steps(4) infinite; }
+@keyframes spin { to { transform:rotate(360deg); } }
+
+/* Live status: lime when the numbers come straight from your account, pink when they don't */
+.foot .live b, .mini-live.live { color:var(--live); }
+.foot .stale b, .mini-live.stale { color:var(--warn); }
+.foot b { font-weight:700; }
+.dot { display:inline-block; width:6px; height:6px; margin:0 5px 1px 0; background:var(--live); vertical-align:middle; }
+.mini-live { display:none; }
 
 /* Big readout: what's left, and when it refills */
 .left { grid-area:left; display:flex; align-items:flex-end; gap:6px; margin-top:8px; }
@@ -140,6 +153,8 @@ html.mini .big-unit { font-size:8.5px; }
 html.mini .count { font-size:18px; }
 html.mini .lane { margin:0; height:44px; }
 html.mini .icon-btn { position:static; grid-area:btn; align-self:center; }
+html.mini .sync-btn { display:none; }
+html.mini .mini-live { display:block; font-family:"Geist Mono", ui-monospace, monospace; font-weight:600; font-size:7.5px; letter-spacing:.1em; text-transform:uppercase; white-space:nowrap; margin-top:1px; }
 
 @media (prefers-reduced-motion: reduce) {
   .icon-btn, .foot .hint { transition:none; }

@@ -62,16 +62,23 @@ To turn the bubble off for Claude Code, delete the hook entries (or run `./unins
 - **Right-click** for the theme (dark, light or match macOS), entering numbers, Open at login, refreshing and quitting.
 - **Click the lane** and Clawd hops.
 
-## Keeping it accurate
+## Live numbers (recommended)
 
-The widget counts the tokens Claude Code writes to its local logs, so it updates on its own every 15 seconds.
-It can't see your exact plan numbers by itself, so sync it now and then:
+The meter can show your exact usage for all of Claude (chats, Claude Code, everything) the same numbers as Claude's Usage page, refreshed every minute. The footer then shows **● LIVE · updated 20s ago**, also in mini size.
 
-- In any Claude Code chat in the Claude app, type **/sync-meter**. Claude reads your real usage and updates the widget.
-- Or right-click → **Enter numbers from Claude's usage card…** and type in the two percentages.
+It needs a Claude Code sign-in on your Mac, once:
 
-Each sync also teaches the widget how fast you burn, so its estimates get better over time.
-Chats on claude.ai and the phone app also count towards your limit but aren't in the logs, so syncing corrects for them.
+```bash
+claude auth login
+```
+
+(If you don't have Claude Code installed in Terminal, the installer's private copy works too: `~/.claude-meter/cli/node_modules/.bin/claude auth login`.)
+
+- **Sync button** (the ↻ next to the size button) fetches right away.
+- The meter renews the sign-in by itself, exactly the way Claude Code does, so you never need to log in again.
+- If live numbers ever stop (no internet, signed out), the footer turns pink: **NOT LIVE**. A stale number never passes for a real one.
+
+Without a sign-in, the meter falls back to estimating from Claude Code's local logs, and `/sync-meter` in a Claude Code chat sets the exact numbers. The estimate cannot see chat usage, so live mode is the way to go.
 
 ## Files
 

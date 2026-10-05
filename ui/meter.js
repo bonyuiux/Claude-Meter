@@ -123,9 +123,7 @@
       $('wReset').textContent = 'Type /sync-meter';
     }
 
-    $('foot').textContent = d.syncedAt
-      ? `≈ Estimate · synced ${ago(d.syncedAt)}`
-      : '≈ Estimate · type /sync-meter in Claude';
+    $('syncBtn').classList.remove('spinning');
     secondTick();
   }
 
@@ -139,6 +137,31 @@
     } else {
       $('count').textContent = countdown(s.resetsAt - Date.now());
       $('resetAt').textContent = `at ${clock(s.resetsAt)}`;
+    }
+    liveStatus();
+  }
+
+  // "● LIVE · updated 20s ago" when the numbers come straight from your account (refreshed every minute).
+  // Anything else is shown in pink as NOT LIVE, so a stale number can never pass for a real one.
+  const since = ms => {
+    const s = Math.max(0, Math.round((Date.now() - ms) / 1000));
+    if (s < 60) return `${s}s`;
+    const m = Math.round(s / 60);
+    return m < 60 ? `${m}m` : `${Math.round(m / 60)}h`;
+  };
+  function liveStatus() {
+    const d = S.d;
+    const live = d.live && d.liveAt;
+    const last = d.liveAt || d.syncedAt;
+    const foot = $('foot'), mini = $('miniLive');
+    for (const el of [foot, mini]) { el.classList.toggle('live', !!live); el.classList.toggle('stale', !live); }
+    if (live) {
+      foot.innerHTML = `<i class="dot"></i><b>Live</b> · updated ${since(d.liveAt)} ago`;
+      mini.innerHTML = `<i class="dot"></i>Live · ${since(d.liveAt)} ago`;
+    } else {
+      const why = d.liveProblem === 'signed-out' ? 'sign in, then sync' : last ? `${since(last)} ago` : 'press sync';
+      foot.innerHTML = `<b>Not live</b> · ${why}`;
+      mini.innerHTML = `Not live${last ? ` · ${since(last)} ago` : ''}`;
     }
   }
 
@@ -290,6 +313,12 @@
   // ---------- interaction ----------
 
   $('sizeBtn').addEventListener('pointerdown', () => post({ type: 'nodrag' }));
+  $('syncBtn').addEventListener('pointerdown', () => post({ type: 'nodrag' }));
+  $('syncBtn').addEventListener('click', () => {
+    $('syncBtn').classList.add('spinning');          // spins until the fresh numbers arrive
+    if (native) post({ type: 'sync' });
+    else setTimeout(() => update({ ...S.d, live: true, liveAt: Date.now() }), 900);
+  });
   $('sizeBtn').addEventListener('click', () => {
     const next = !root.classList.contains('mini');
     if (native) post({ type: 'mini', value: next });
@@ -317,7 +346,7 @@
     };
     const session = { kind: 'session', known: true, idle: false, ...states[q.get('state') || 'ok'] };
     update({
-      now, plan: 'Pro', syncedAt: now - 12 * 60e3,
+      now, plan: 'Pro', syncedAt: now - 12 * 60e3, live: q.get('live') !== '0', liveAt: now - 20e3,
       theme: q.get('theme') || 'dark', mini: q.get('mini') === '1',
       session,
       weekly: { kind: 'weekly', known: true, percentUsed: 40, startsAt: now - 5 * 24 * H, resetsAt: now + 2 * 24 * H },
