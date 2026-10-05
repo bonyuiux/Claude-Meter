@@ -2,7 +2,7 @@
 //   working → "Thinking…" (Clawd looks up and taps his feet)
 //   done    → "Done!" (Clawd jumps with confetti; Meter.swift hides it after a few seconds)
 //   waiting → "Needs you" (Clawd waves; Claude is waiting for a permission)
-// Opened in a browser it shows a demo: bubble.html?state=done&side=below&theme=light
+// Opened in a browser it shows a demo: bubble.html?state=done&label=Chat&count=2&side=below&theme=light
 (() => {
   const $ = id => document.getElementById(id);
   const root = document.documentElement;
@@ -58,7 +58,7 @@
     $('dots').textContent = state === 'working' ? '.'.repeat(1 + (Math.floor(f / 3) % 3)) : '';
   }
 
-  function show(next, theme, side) {
+  function show(next, theme, side, count = 1, label = '') {
     const resolved = theme === 'auto' ? (matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark') : (theme || 'dark');
     root.dataset.theme = resolved;
     box.dataset.side = side || 'above';
@@ -66,6 +66,10 @@
     state = next;
     box.dataset.state = state;
     $('text').textContent = words[state] || '';
+    $('badge').hidden = !(count > 1);
+    $('badge').textContent = `×${count}`;
+    $('sub').hidden = !label;
+    $('sub').textContent = label;
     if (changed) { box.classList.remove('on'); void box.offsetWidth; box.classList.add('on'); }   // replay the pop
     draw();
   }
@@ -76,6 +80,6 @@
 
   if (!(window.webkit && window.webkit.messageHandlers && window.webkit.messageHandlers.bubble)) {
     const q = new URLSearchParams(location.search);
-    if (q.get('state')) show(q.get('state'), q.get('theme') || 'dark', q.get('side') || 'above');
+    if (q.get('state')) show(q.get('state'), q.get('theme') || 'dark', q.get('side') || 'above', +(q.get('count') || 1), q.get('label') || '');
   }
 })();

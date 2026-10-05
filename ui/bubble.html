@@ -36,6 +36,13 @@
   .bubble[data-state="done"] .tail rect:not(.fill) { fill:#0E0E0B; }
   .bubble[data-state="waiting"] { color:var(--warn); }
   .dots { display:inline-block; width:2.2ch; text-align:left; }
+  .words { display:grid; gap:2px; }
+  .line { display:flex; align-items:center; }
+  /* "×2" when more than one chat or session is busy */
+  .badge { margin-left:6px; padding:2px 5px 1px; background:#E8FF00; color:#0E0E0B; font-weight:700; font-size:11px; letter-spacing:.06em; }
+  .badge[hidden], .sub[hidden] { display:none; }
+  /* which one just finished: "Chat" or the project name */
+  .sub { font-size:9.5px; letter-spacing:.12em; max-width:150px; overflow:hidden; text-overflow:ellipsis; opacity:.8; }
 
   @keyframes pop { 0% { transform:scale(.4); } 66% { transform:scale(1.08); } 100% { transform:scale(1); } }
   @media (prefers-reduced-motion: reduce) { .bubble.on { animation:none; } }
@@ -44,7 +51,10 @@
 <body>
   <div class="bubble" id="bubble" data-state="working" data-side="above" role="status">
     <canvas id="sprite" aria-hidden="true"></canvas>
-    <span><span id="text">Thinking</span><span class="dots" id="dots"></span></span>
+    <span class="words">
+      <span class="line"><span id="text">Thinking</span><span class="dots" id="dots"></span><b class="badge" id="badge" hidden></b></span>
+      <small class="sub" id="sub" hidden></small>
+    </span>
     <!-- A stepped pixel tail pointing at the meter -->
     <svg class="tail" viewBox="0 0 7 4" shape-rendering="crispEdges" aria-hidden="true">
       <rect x="0" y="0" width="7" height="1"/><rect x="1" y="1" width="5" height="1"/>

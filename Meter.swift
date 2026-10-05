@@ -337,6 +337,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
 
         timer = Timer.scheduledTimer(withTimeInterval: 15, repeats: true) { [weak self] _ in self?.refresh() }
         setUpBubble()
+        chatWatcher.start()
     }
 
     // MARK: Status bubble (what Claude is doing right now)
@@ -348,11 +349,14 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     let activityDir = stateDir.appendingPathComponent("activity")
     var bubblePanel: NSPanel!
     var bubbleWeb: WKWebView!
-    let bubbleSize = NSSize(width: 230, height: 84)
+    let bubbleSize = NSSize(width: 270, height: 100)
     var seenAt: [String: Double] = [:]
     var firstPoll = true
     var celebrateUntil = Date.distantPast
+    var celebrateLabel = ""
     var bubbleState = "idle"
+    var bubbleCount = 0
+    var bubbleKey = ""
 
     func setUpBubble() {
         bubbleWeb = WKWebView(frame: NSRect(origin: .zero, size: bubbleSize))
@@ -371,29 +375,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in self?.pollActivity() }
     }
 
+    /// Combines Claude Code (hook files) and Claude chat (the watcher) into one bubble.
+    /// Priority: Needs you → Done → Thinking. Several at once show as "×2"; a finish says which one.
     func pollActivity() {
         let now = Date().timeIntervalSince1970
-        var working = false, waiting = false, justDone = false
+        var working = 0, waiting = false
+        var doneLabel: String?
         let files = (try? fm.contentsOfDirectory(at: activityDir, includingPropertiesForKeys: nil)) ?? []
         for url in files where url.pathExtension == "json" {
             guard let d = try? Data(contentsOf: url),
                   let o = try? JSONSerialization.jsonObject(with: d) as? [String: Any],
                   let state = o["state"] as? String, let at = (o["at"] as? NSNumber)?.doubleValue else { continue }
             let age = now - at
-            if age > 86400 { try? fm.removeItem(at: url); continue }   // tidy up old chats
+            if age > 86400 { try? fm.removeItem(at: url); continue }   // tidy up old sessions
             let isNew = seenAt[url.path] != at
             seenAt[url.path] = at
             switch state {
-            case "working": if age < 600 { working = true }            // no sign of life for 10 min = stopped
+            case "working": if age < 600 { working += 1 }               // no sign of life for 10 min = stopped
             case "waiting": if age < 1800 { waiting = true }
-            case "done":    if isNew && !firstPoll && age < 30 { justDone = true }
+            case "done":
+                if isNew && !firstPoll && age < 30 {
+                    let project = (o["project"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "Claude Code"
+                    doneLabel = project
+                }
             default: break
             }
         }
         firstPoll = false
-        if justDone { celebrateUntil = Date().addingTimeInterval(6) }
-        let next = waiting ? "waiting" : celebrateUntil > Date() ? "done" : working ? "working" : "idle"
-        if next != bubbleState { bubbleState = next; showBubble() }
+        if chatWatcher.thinking { working += 1 }
+        if chatWatcher.takeFinished() { doneLabel = "Chat" }
+        if let label = doneLabel { celebrateUntil = Date().addingTimeInterval(6); celebrateLabel = label }
+
+        let state = waiting ? "waiting" : celebrateUntil > Date() ? "done" : working > 0 ? "working" : "idle"
+        let key = "\(state)|\(working)|\(state == "done" ? celebrateLabel : "")"
+        if key != bubbleKey { bubbleKey = key; bubbleState = state; bubbleCount = working; showBubble() }
+    }
+
+    func bubbleScript(_ side: String) -> String {
+        let args: [Any] = [bubbleState, theme, side, bubbleCount, bubbleState == "done" ? celebrateLabel : ""]
+        let json = String(data: try! JSONSerialization.data(withJSONObject: args), encoding: .utf8)!
+        return "window.bubble && window.bubble.show(...\(json))"
     }
 
     func showBubble() {
@@ -404,7 +425,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         }
         let side = placeBubble()
         if bubblePanel.parent == nil { panel.addChildWindow(bubblePanel, ordered: .above) }   // follows the meter when dragged
-        bubbleWeb.evaluateJavaScript("window.bubble && window.bubble.show('\(bubbleState)', '\(theme)', '\(side)')")
+        bubbleWeb.evaluateJavaScript(bubbleScript(side))
     }
 
     /// Puts the bubble just above the meter, or just below it when the meter is at the top of the screen.
@@ -418,9 +439,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         origin.x = min(max(origin.x, vis.minX), vis.maxX - bubbleSize.width)
         bubblePanel.setFrameOrigin(origin)
         let side = above ? "above" : "below"
-        if bubbleState != "idle" {
-            bubbleWeb.evaluateJavaScript("window.bubble && window.bubble.show('\(bubbleState)', '\(theme)', '\(side)')")
-        }
+        if bubbleState != "idle" { bubbleWeb.evaluateJavaScript(bubbleScript(side)) }
         return side
     }
 
@@ -493,6 +512,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         let m = NSMenu()
         m.addItem(item("Enter numbers from Claude's usage card…", #selector(enterNumbers)))
         m.addItem(item("How to sync exactly", #selector(howToSync)))
+        let chat = item("Show Claude chat status", #selector(toggleChatStatus))
+        chat.state = chatWatcher.enabled && AXIsProcessTrusted() ? .on : .off
+        m.addItem(chat)
         m.addItem(.separator())
         for (title, key) in [("Dark theme", "dark"), ("Light theme", "light"), ("Match macOS", "auto")] {
             let i = item(title, #selector(pickTheme(_:)))
@@ -523,6 +545,31 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     @objc func toggleMini() { mini.toggle() }
     @objc func refreshNow() { refresh() }
     @objc func quit() { NSApp.terminate(nil) }
+
+    /// Chat status needs Accessibility permission; explain it before sending you to System Settings.
+    @objc func toggleChatStatus() {
+        if AXIsProcessTrusted() {
+            prefs.set(!chatWatcher.enabled, forKey: "chatStatus")
+            return
+        }
+        let a = NSAlert()
+        a.messageText = "Show when Claude chat is thinking"
+        a.informativeText = """
+        To see Claude chat's "Thinking…" and "Done!", the meter watches the Claude app for its Stop button, \
+        the same way you do. macOS asks you to allow this once.
+
+        In the next window, switch Claude Meter on under Accessibility. The meter only looks at button names, \
+        never your messages.
+        """
+        a.addButton(withTitle: "Open System Settings")
+        a.addButton(withTitle: "Not now")
+        NSApp.activate(ignoringOtherApps: true)
+        guard a.runModal() == .alertFirstButtonReturn else { return }
+        prefs.set(true, forKey: "chatStatus")
+        let prompt = [kAXTrustedCheckOptionPrompt.takeUnretainedValue() as String: true] as CFDictionary
+        _ = AXIsProcessTrustedWithOptions(prompt)       // adds Claude Meter to the list
+        NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
+    }
 
     @objc func about() {
         let a = NSAlert()
@@ -595,6 +642,78 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         refresh()
     }
 }
+
+
+// MARK: - Claude chat status (via macOS Accessibility)
+//
+// Claude chat has no hooks, so the meter looks at the Claude app the way you do: while a reply is
+// being written the app shows a "Stop response" button. Seeing it appear = thinking; seeing it go
+// away while the same conversation is still open = done. If you switch conversations mid-reply the
+// meter can't tell whether it finished, so it shows nothing rather than a fake "Done!".
+// Needs Accessibility permission (System Settings → Privacy & Security → Accessibility).
+// Only button names and the conversation address are read; never any message text.
+
+final class ChatWatcher {
+    let queue = DispatchQueue(label: "meter.chat")
+    private(set) var thinking = false          // read on the main thread
+    private var finishedFlag = false
+    private var wasThinking = false
+    private var thinkingAt: String?
+
+    var enabled: Bool { prefs.object(forKey: "chatStatus") == nil ? true : prefs.bool(forKey: "chatStatus") }
+
+    func start() {
+        Timer.scheduledTimer(withTimeInterval: 0.6, repeats: true) { [weak self] _ in
+            guard let self, self.enabled, AXIsProcessTrusted() else { self?.publish(false, false); return }
+            self.queue.async { self.scan() }
+        }
+    }
+
+    /// True once per finished reply.
+    func takeFinished() -> Bool { defer { finishedFlag = false }; return finishedFlag }
+
+    private func publish(_ isThinking: Bool, _ finished: Bool) {
+        DispatchQueue.main.async {
+            self.thinking = isThinking
+            if finished { self.finishedFlag = true }
+        }
+    }
+
+    private func scan() {
+        guard let app = NSRunningApplication.runningApplications(withBundleIdentifier: "com.anthropic.claudefordesktop").first else {
+            wasThinking = false; publish(false, false); return
+        }
+        let root = AXUIElementCreateApplication(app.processIdentifier)
+        AXUIElementSetAttributeValue(root, "AXManualAccessibility" as CFString, kCFBooleanTrue)   // Electron builds its tree on request
+        var nodes = 0, stop = false
+        var place: String?
+        walk(root, 0, &nodes, &stop, &place)
+        var finished = false
+        if stop && !wasThinking { thinkingAt = place }
+        if !stop && wasThinking { finished = (place == thinkingAt) }   // same conversation still open
+        wasThinking = stop
+        publish(stop, finished)
+    }
+
+    private func attr(_ el: AXUIElement, _ name: String) -> AnyObject? {
+        var v: AnyObject?
+        return AXUIElementCopyAttributeValue(el, name as CFString, &v) == .success ? v : nil
+    }
+
+    private func walk(_ el: AXUIElement, _ depth: Int, _ nodes: inout Int, _ stop: inout Bool, _ place: inout String?) {
+        if depth > 70 || nodes > 8000 || stop && place != nil { return }
+        nodes += 1
+        let role = attr(el, kAXRoleAttribute) as? String ?? ""
+        if role == "AXMenuBar" { return }
+        if role == "AXWebArea", place == nil, let url = attr(el, "AXURL") { place = "\(url)" }
+        if role == "AXButton" {
+            let label = [kAXTitleAttribute, kAXDescriptionAttribute].compactMap { attr(el, $0) as? String }.first { !$0.isEmpty }
+            if label?.lowercased() == "stop response" { stop = true }   // chat only; Claude Code's button is plain "Stop"
+        }
+        for child in attr(el, kAXChildrenAttribute) as? [AXUIElement] ?? [] { walk(child, depth + 1, &nodes, &stop, &place) }
+    }
+}
+let chatWatcher = ChatWatcher()
 
 // `ClaudeMeter --dump` prints what the widget would show, for troubleshooting.
 if CommandLine.arguments.contains("--dump") {

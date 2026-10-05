@@ -40,11 +40,20 @@ The installer builds the app on your Mac and puts it in Applications. It also ad
 
 A small bubble pops out above the meter (or below it, if the meter sits at the top of the screen) to show what Claude is doing:
 
-- **Thinking…** while Claude works on your prompt.
-- **Done!** with Clawd cheering, for a few seconds when it finishes.
-- **Needs you** when Claude is waiting for a permission.
+- **Thinking…** while Claude works, in Claude Code and in Claude chat. When several are busy at once it shows a count, like **×2**.
+- **Done!** with Clawd cheering, for a few seconds when one finishes. A small label says which one: **Chat** or the project's folder name.
+- **Needs you** when Claude Code is waiting for a permission. This one always shows first.
 
-It works through Claude Code hooks in `~/.claude/settings.json` (UserPromptSubmit, PostToolUse, Stop, StopFailure, SessionEnd and Notification). They run `~/.claude-meter/hook.sh`, which writes a tiny status file the meter reads. To turn the bubble off, delete those hook entries (or run `./uninstall.sh`).
+**Claude Code** status comes from hooks in `~/.claude/settings.json`, which run `~/.claude-meter/hook.sh`.
+
+**Claude chat** has no hooks, so the meter watches the Claude desktop app for its **Stop response** button, the same way you would. That needs one switch:
+
+1. Right-click the meter and choose **Show Claude chat status**, then **Open System Settings**.
+2. Under **Privacy & Security → Accessibility**, switch **Claude Meter** on.
+
+The meter only reads button names, never your messages. If you switch to another conversation while a reply is still being written, the meter can't tell whether it finished, so it shows nothing rather than a false "Done!". After updating Claude Meter, switch it off and on again in Accessibility, because macOS treats each new build as a new app.
+
+To turn the bubble off for Claude Code, delete the hook entries (or run `./uninstall.sh`). For chat, untick **Show Claude chat status** in the right-click menu.
 
 ## Using it
 

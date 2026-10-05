@@ -14,5 +14,8 @@ if [ "$state" = notify ]; then
   printf '%s' "$input" | grep -qi 'permission' || exit 0
   state=waiting
 fi
-printf '{"state":"%s","at":%s}\n' "$state" "$(date +%s)" > "$dir/$sid.json"
+# The project folder name lets the bubble say which session finished. Quotes are stripped to keep the JSON valid.
+cwd=$(printf '%s' "$input" | sed -n 's/.*"cwd" *: *"\([^"]*\)".*/\1/p' | head -n 1)
+project=$(basename "${cwd:-}" 2>/dev/null | tr -d '"\\')
+printf '{"state":"%s","at":%s,"project":"%s"}\n' "$state" "$(date +%s)" "$project" > "$dir/$sid.json"
 exit 0
