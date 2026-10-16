@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Claude Meter Promo</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Geist:wght@500;600&family=Geist+Mono:wght@500;600;700&family=Geist+Pixel&display=swap">
+<style>
+  :root { --ink:#0B0A12; --lime:#E8FF00; --muted:#9A96B0; }
+  html, body { margin:0; height:100%; background:#050408; color:var(--muted); }
+  body { display:grid; place-items:center; font:500 13px/1.4 "Geist Mono", ui-monospace, monospace; }
+  ::selection { background:var(--lime); color:var(--ink); }
+  canvas { display:block; height:min(92vh, 1350px); aspect-ratio:1080 / 1350; width:auto; max-width:96vw; image-rendering:pixelated; }
+  .hint { position:fixed; left:16px; bottom:12px; letter-spacing:.02em; }
+</style>
+</head>
+<body>
+  <canvas id="v" width="1080" height="1350" aria-label="Claude Meter promo video"></canvas>
+  <p class="hint">Space to pause · ← → to step · ?t=seconds to jump</p>
+<script src="promo.js"></script>
+</body>
+</html>

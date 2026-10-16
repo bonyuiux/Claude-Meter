@@ -2,3 +2,11 @@
 .build/
 Claude Meter.app/
 .DS_Store
+
+# 29 MB master promo render: not stored in git. Regenerate with "Claude Meter Promo/render.sh",
+# or get the 1080x1350 high-quality encode from Drive (see docs/PROJECT-LOG.md).
+Claude Meter Promo/claude-meter-promo.mp4
+
+# compiled helper binaries (built from the .swift files next to them)
+Claude Meter Case Study/.tools/capture
+Claude Meter Case Study/.tools/probe
