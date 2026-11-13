@@ -161,6 +161,8 @@ func saveSync(_ s: SyncData, source: String) {
 // The key never leaves this Mac except to Anthropic, and the meter never shows or logs it.
 
 let keychainService = "Claude Code-credentials"
+// Installs Claude Code's command-line tool if it's missing, then opens the browser sign-in. Uses full paths.
+let signInScript = "C=$(command -v claude || echo ~/.local/bin/claude); [ -x \"$C\" ] || { curl -fsSL https://claude.ai/install.sh | bash; C=~/.local/bin/claude; }; \"$C\" auth login"
 let usageURL = URL(string: "https://api.anthropic.com/api/oauth/usage")!
 let tokenURL = URL(string: "https://platform.claude.com/v1/oauth/token")!
 let oauthClientID = "9d1c250a-e61b-44d9-88ed-5944d1962f5e"   // Claude Code's public client id
@@ -248,7 +250,17 @@ final class LiveUsage {
         ])
         let (status, json) = request(req)
         guard status == 200, let json, let fresh = json["access_token"] as? String else {
-            if status == 400 || status == 401 { problem = "signed-out" }   // renewal refused: sign in again
+            if status == 400 || status == 401 {
+                // Refresh keys are single-use. If Claude Code (or the desktop app) renewed first, our copy is stale
+                // but the Keychain already holds a newer one. Use that before calling it a sign-out.
+                if let latest = readCredentials()?.blob["claudeAiOauth"] as? [String: Any],
+                   let t = latest["accessToken"] as? String,
+                   (latest["refreshToken"] as? String) != refresh || t != token {
+                    let exp = ((latest["expiresAt"] as? NSNumber)?.doubleValue ?? 0) / 1000
+                    if exp - Date().timeIntervalSince1970 > 60 { return t }
+                }
+                problem = "signed-out"   // renewal really refused: sign in again
+            }
             return force ? nil : token
         }
         oauth["accessToken"] = fresh
@@ -639,7 +651,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
                 DispatchQueue.main.async {
                     self.lastPayload = p
                     self.push()
-                    if self.meter.live.problem == "signed-out" { self.signInHelp() }
+                    if self.meter.live.problem == "signed-out" { self.startSignIn() }
                 }
             }
         case "mini": mini = (body["value"] as? Bool) ?? false
@@ -721,16 +733,46 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     @objc func refreshNow() { refresh() }
     @objc func quit() { NSApp.terminate(nil) }
 
+    var signingIn = false
+
+    /// Signs in for live numbers without Terminal: runs Claude Code's `auth login` (installing the tool first if
+    /// it's missing), which opens the browser sign-in page. When it finishes, the meter fetches straight away.
+    /// If it can't run, falls back to the help box with a copyable command.
+    func startSignIn() {
+        guard !signingIn else { return }
+        signingIn = true
+        DispatchQueue.global().async { [weak self] in   // not `work`: this waits for you to sign in, and must not block refreshes
+            guard let self else { return }
+            let p = Process()
+            p.executableURL = URL(fileURLWithPath: "/bin/zsh")
+            p.arguments = ["-lc", signInScript]
+            p.standardInput = FileHandle.nullDevice
+            p.standardOutput = FileHandle.nullDevice
+            p.standardError = FileHandle.nullDevice
+            var ok = false
+            do {
+                try p.run()
+                DispatchQueue.global().asyncAfter(deadline: .now() + 300) { if p.isRunning { p.terminate() } }   // give up after 5 min
+                p.waitUntilExit()
+                ok = p.terminationStatus == 0
+            } catch {}
+            DispatchQueue.main.async {
+                self.signingIn = false
+                if ok { self.meter.live.forceNext = true; self.refresh() } else { self.signInHelp() }
+            }
+        }
+    }
+
     /// Shown when live numbers need a Claude Code sign-in on this Mac.
     /// The command installs Claude Code's command-line tool if it is missing, then signs in. It uses the full
     /// path, so it works even when `claude` isn't on Terminal's PATH (the usual reason a pasted command fails).
     func signInHelp() {
-        let command = "[ -x ~/.local/bin/claude ] || curl -fsSL https://claude.ai/install.sh | bash; ~/.local/bin/claude auth login"
         let a = NSAlert()
         a.messageText = "Sign in for live numbers"
         a.informativeText = """
         Live numbers come from your Claude account through a Claude Code sign-in on this Mac.
 
+        The automatic sign-in didn't work. To do it by hand:
         1. Click "Copy command".
         2. Open Terminal, paste (⌘V) and press Return.
         3. Sign in in the browser window that opens.
@@ -741,7 +783,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
         NSApp.activate(ignoringOtherApps: true)
         if a.runModal() == .alertFirstButtonReturn {
             NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(command, forType: .string)
+            NSPasteboard.general.setString(signInScript, forType: .string)
         }
     }
 
