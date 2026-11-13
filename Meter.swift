@@ -722,19 +722,27 @@ final class AppDelegate: NSObject, NSApplicationDelegate, WKScriptMessageHandler
     @objc func quit() { NSApp.terminate(nil) }
 
     /// Shown when live numbers need a Claude Code sign-in on this Mac.
+    /// The command installs Claude Code's command-line tool if it is missing, then signs in. It uses the full
+    /// path, so it works even when `claude` isn't on Terminal's PATH (the usual reason a pasted command fails).
     func signInHelp() {
+        let command = "[ -x ~/.local/bin/claude ] || curl -fsSL https://claude.ai/install.sh | bash; ~/.local/bin/claude auth login"
         let a = NSAlert()
         a.messageText = "Sign in for live numbers"
         a.informativeText = """
         Live numbers come from your Claude account through a Claude Code sign-in on this Mac.
 
-        Open Terminal and run:  claude auth login
-        (or, if you installed Claude Meter's own copy:  ~/.claude-meter/cli/node_modules/.bin/claude auth login)
-
-        Then click the sync button again.
+        1. Click "Copy command".
+        2. Open Terminal, paste (⌘V) and press Return.
+        3. Sign in in the browser window that opens.
+        4. Click the sync button again.
         """
+        a.addButton(withTitle: "Copy command")
+        a.addButton(withTitle: "Close")
         NSApp.activate(ignoringOtherApps: true)
-        a.runModal()
+        if a.runModal() == .alertFirstButtonReturn {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(command, forType: .string)
+        }
     }
 
     /// Chat status needs Accessibility permission; explain it before sending you to System Settings.

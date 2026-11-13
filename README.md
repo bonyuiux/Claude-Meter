@@ -66,13 +66,13 @@ To turn the bubble off for Claude Code, delete the hook entries (or run `./unins
 
 The meter can show your exact usage for all of Claude (chats, Claude Code, everything) the same numbers as Claude's Usage page, refreshed every minute. The footer then shows **● LIVE · updated 20s ago**, also in mini size.
 
-It needs a Claude Code sign-in on your Mac, once:
+It needs a Claude Code sign-in on your Mac. Click the sync button, then **Copy command** in the box that appears, paste it into Terminal and press Return. It installs Claude Code's command-line tool if you don't have it, then opens a browser to sign in. To do it by hand:
 
 ```bash
-claude auth login
+[ -x ~/.local/bin/claude ] || curl -fsSL https://claude.ai/install.sh | bash; ~/.local/bin/claude auth login
 ```
 
-(If you don't have Claude Code installed in Terminal, the installer's private copy works too: `~/.claude-meter/cli/node_modules/.bin/claude auth login`.)
+(The full path matters: signing in to the Claude desktop app does not give Terminal a `claude` command, so a bare `claude auth login` says "command not found".)
 
 - **Sync button** (the ↻ next to the size button) fetches right away.
 - The meter renews the sign-in by itself, exactly the way Claude Code does, so you never need to log in again.
